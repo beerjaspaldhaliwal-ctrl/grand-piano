@@ -44,20 +44,41 @@ jobs:
           name: GrandPiano-Windows
           path: dist/GrandPiano
 
+      - name: Build installer (GrandPiano-Setup.exe)
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress | Out-Null }
+          & $iscc /Qp installer/GrandPiano.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: GrandPiano-Windows-Setup
+          path: dist/GrandPiano-Setup.exe
+
       - name: Validate with pluginval
         shell: pwsh
         run: |
           Invoke-WebRequest -Uri https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
           Expand-Archive pluginval.zip -DestinationPath pluginval
-          ./pluginval/pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 300000 --output-dir pluginval-logs "build/GrandPiano_artefacts/Release/VST3/Grand Piano.vst3"
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # pluginval is a GUI-subsystem exe: wait for it explicitly to get the real exit code
+          $args = @("--strictness-level", "5", "--validate-in-process", "--timeout-ms", "300000",
+                    "--output-dir", "pluginval-logs", "--validate", "`"build/GrandPiano_artefacts/Release/VST3/Grand Piano.vst3`"")
+          $p = Start-Process -FilePath "./pluginval/pluginval.exe" -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput pluginval-out.txt
+          Get-Content pluginval-out.txt -Tail 60
+          Write-Host "pluginval exit code: $($p.ExitCode)"
+          exit $p.ExitCode
 
       - name: Upload pluginval logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: pluginval-logs-windows
-          path: pluginval-logs
+          path: |
+            pluginval-logs
+            pluginval-out.txt
           if-no-files-found: ignore
 
       - name: Package with samples built in
@@ -94,6 +115,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            dist/GrandPiano-Setup.exe
             GrandPiano-Windows.zip
             GrandPiano-Windows-WithSamples.zip
 
