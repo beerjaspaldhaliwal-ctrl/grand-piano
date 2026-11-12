@@ -1,0 +1,132 @@
+name: Build plugin
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      with_samples:
+        description: "Also build the package with the piano samples built in (~720 MB)"
+        type: boolean
+        default: true
+
+env:
+  SAMPLES_URL: https://freepats.zenvoid.org/Piano/SalamanderGrandPiano/SalamanderGrandPiano-SFZ+FLAC-V3+20200602.tar.gz
+
+jobs:
+  windows:
+    name: Windows (VST3 + Standalone)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $out = "dist/GrandPiano"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item -Recurse "build/GrandPiano_artefacts/Release/VST3/Grand Piano.vst3" "$out/"
+          Copy-Item "build/GrandPiano_artefacts/Release/Standalone/Grand Piano.exe" "$out/"
+          Copy-Item "INSTALL-WINDOWS.txt" "$out/"
+          Copy-Item "README.md" "$out/"
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: GrandPiano-Windows
+          path: dist/GrandPiano
+
+      - name: Validate with pluginval
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri https://github.com/Tracktion/pluginval/releases/download/v1.0.4/pluginval_Windows.zip -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pluginval
+          ./pluginval/pluginval.exe --strictness-level 5 --validate-in-process --timeout-ms 300000 --output-dir pluginval-logs "build/GrandPiano_artefacts/Release/VST3/Grand Piano.vst3"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload pluginval logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pluginval-logs-windows
+          path: pluginval-logs
+          if-no-files-found: ignore
+
+      - name: Package with samples built in
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.with_samples)
+        shell: pwsh
+        run: |
+          curl.exe -L --fail -o salamander.tar.gz $env:SAMPLES_URL
+          New-Item -ItemType Directory -Force -Path samples | Out-Null
+          tar -xzf salamander.tar.gz -C samples
+          $full = "dist/GrandPiano-WithSamples"
+          New-Item -ItemType Directory -Force -Path $full | Out-Null
+          Copy-Item -Recurse "dist/GrandPiano/*" "$full/"
+          $res = "$full/Grand Piano.vst3/Contents/Resources"
+          New-Item -ItemType Directory -Force -Path $res | Out-Null
+          Copy-Item -Recurse "samples/*" "$res/"
+
+      - name: Upload plugin with samples
+        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.with_samples)
+        uses: actions/upload-artifact@v4
+        with:
+          name: GrandPiano-Windows-WithSamples
+          path: dist/GrandPiano-WithSamples
+          compression-level: 0
+
+      - name: Zip for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist/GrandPiano/*" -DestinationPath "GrandPiano-Windows.zip"
+          Compress-Archive -Path "dist/GrandPiano-WithSamples/*" -DestinationPath "GrandPiano-Windows-WithSamples.zip" -CompressionLevel NoCompression
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            GrandPiano-Windows.zip
+            GrandPiano-Windows-WithSamples.zip
+
+  macos:
+    name: macOS (VST3 + AU + Standalone)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0
+
+      - name: Build
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Package
+        run: |
+          mkdir -p dist/GrandPiano
+          cp -R "build/GrandPiano_artefacts/Release/VST3/Grand Piano.vst3" dist/GrandPiano/
+          cp -R "build/GrandPiano_artefacts/Release/AU/Grand Piano.component" dist/GrandPiano/
+          cp -R "build/GrandPiano_artefacts/Release/Standalone/Grand Piano.app" dist/GrandPiano/
+          for b in dist/GrandPiano/*.vst3 dist/GrandPiano/*.component dist/GrandPiano/*.app; do codesign --force --deep -s - "$b"; done
+          cp README.md dist/GrandPiano/
+          cd dist && ditto -c -k --keepParent GrandPiano GrandPiano-macOS.zip
+
+      - name: Upload plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: GrandPiano-macOS
+          path: dist/GrandPiano-macOS.zip
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/GrandPiano-macOS.zip

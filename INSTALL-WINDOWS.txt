@@ -1,0 +1,33 @@
+GRAND PIANO - installing in FL Studio (Windows)
+===============================================
+
+1. Copy the folder "Grand Piano.vst3" into:
+
+       C:\Program Files\Common Files\VST3\
+
+2. Open FL Studio and go to  Options > Manage plugins  and click
+   "Find installed plugins" (or "Find more plugins").
+   "Grand Piano" appears under Generators. Tick the star to add it to your favourites.
+
+3. Add it to the Channel Rack: click "+" in the Channel Rack (or Add > More plugins)
+   and choose "Grand Piano".
+
+4. Piano samples
+   - If you downloaded the "WithSamples" package, the samples are inside the plugin
+     already - nothing else to do.
+   - Otherwise click the gold "Get Samples" button in the plugin. It downloads the free
+     Salamander Grand Piano (Yamaha C5 concert grand, 16 velocity layers, ~740 MB) into
+       %LOCALAPPDATA%\Grand Piano\
+     Until it finishes the plugin plays a built-in modelled piano.
+
+   The first time the samples load, the plugin prepares them for disk streaming
+   (10-60 seconds, about 1.3 GB in %LOCALAPPDATA%\Grand Piano\Cache). After that it
+   loads in about a second.
+
+Tips
+ - Use the preset menu (top centre) - "Studio Pop" and "Bright Rock" give the
+   produced, upfront sound of commercial pop pianos; "Concert Grand" is natural.
+ - Hammer = brighter/mellower tone without changing loudness.
+ - Touch = velocity response (turn right if your keyboard feels too heavy).
+ - Stretch = 0% exact equal temperament, 100% the piano's own recorded stretch tuning.
+ - "Grand Piano.exe" is a standalone version for playing without FL Studio.
