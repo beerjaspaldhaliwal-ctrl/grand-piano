@@ -5,3 +5,4 @@ cmake-build*/
 *.user
 .DS_Store
 /samples/
+/release-dl/
