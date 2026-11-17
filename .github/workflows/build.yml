@@ -11,11 +11,16 @@ on:
         description: "Also build the package with the piano samples built in (~720 MB)"
         type: boolean
         default: true
+      release_tag:
+        description: "Publish a GitHub Release with this tag (e.g. v1.0.0). Leave empty for a normal build."
+        type: string
+        default: ""
 
 permissions:
   contents: write   # lets tagged builds publish a GitHub Release
 
 env:
+  RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.release_tag }}
   SAMPLES_URL: https://freepats.zenvoid.org/Piano/SalamanderGrandPiano/SalamanderGrandPiano-SFZ+FLAC-V3+20200602.tar.gz
 
 jobs:
@@ -85,7 +90,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Package with samples built in
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.with_samples)
+        if: env.RELEASE_TAG != '' || (github.event_name == 'workflow_dispatch' && inputs.with_samples)
         shell: pwsh
         run: |
           curl.exe -L --fail -o salamander.tar.gz $env:SAMPLES_URL
@@ -99,7 +104,7 @@ jobs:
           Copy-Item -Recurse "samples/*" "$res/"
 
       - name: Upload plugin with samples
-        if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.with_samples)
+        if: env.RELEASE_TAG != '' || (github.event_name == 'workflow_dispatch' && inputs.with_samples)
         uses: actions/upload-artifact@v4
         with:
           name: GrandPiano-Windows-WithSamples
@@ -107,16 +112,19 @@ jobs:
           compression-level: 0
 
       - name: Zip for release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         shell: pwsh
         run: |
           Compress-Archive -Path "dist/GrandPiano/*" -DestinationPath "GrandPiano-Windows.zip"
           Compress-Archive -Path "dist/GrandPiano-WithSamples/*" -DestinationPath "GrandPiano-Windows-WithSamples.zip" -CompressionLevel NoCompression
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Grand Piano ${{ env.RELEASE_TAG }}
           files: |
             dist/GrandPiano-Setup.exe
             GrandPiano-Windows.zip
@@ -151,7 +159,10 @@ jobs:
           path: dist/GrandPiano-macOS.zip
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: env.RELEASE_TAG != ''
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Grand Piano ${{ env.RELEASE_TAG }}
           files: dist/GrandPiano-macOS.zip
